@@ -16,5 +16,11 @@ CHIP PC {
     OUT out[16];
 
     PARTS:
-    // Put your code here:
+    Register(in=regIn, load=true, out=out, out=outLoopback);
+    Inc16(in=outLoopback, out=outLoopbackInc);
+
+    // Control - priority is backwards left to right from top to bottom of if statement.
+    Mux16(a=loadedOut, b=false, sel=reset, out=regIn);
+    Mux16(a=incOut, b=in, sel=load, out=loadedOut);
+    Mux16(a=outLoopback, b=outLoopbackInc, sel=inc, out=incOut);
 }
