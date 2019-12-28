@@ -39,5 +39,18 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+    ALU(x=x, y=y, zx= , nx=, zy=, ny=, f=, no, out=outM, out=aluOut, zr=, ng=);
+    DRegister(in=aluOut, load=, out=x);
+    Mux16(a=aRegOut, b=inM, sel=, out=y);
+
+    // Instruction decoding + load A register. 
+    // Load A if this is an a instruction or if the d1 bit is set.
+    // Value to load A with is what came from the alU if C instruction, or lower 15 bits of instruction
+    // if A instruction.
+    Not(in=instruction[15], out=isAInstruction);
+    Or(a=isAInstruction, b=instruction[5], out=loadAReg);
+    Mux16(a=aluOut, b[0..14]=instruction[0..14], b[15]=false, sel=instruction[15], out=aRegIn);
+    ARegister(in=aRegIn, load=loadAReg, out=aRegOut, out=addressM);
+
+    PC(in=aRegOut, load=, inc=, reset=reset, out=pc);
 }
