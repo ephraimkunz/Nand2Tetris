@@ -39,18 +39,40 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    ALU(x=x, y=y, zx= , nx=, zy=, ny=, f=, no, out=outM, out=aluOut, zr=, ng=);
-    DRegister(in=aluOut, load=, out=x);
-    Mux16(a=aRegOut, b=inM, sel=, out=y);
-
     // Instruction decoding + load A register. 
-    // Load A if this is an a instruction or if the d1 bit is set.
-    // Value to load A with is what came from the alU if C instruction, or lower 15 bits of instruction
+    // Load A if this is an instruction or if the d1 bit is set.
+    // Value to load A with is what came from the ALU if C instruction, or lower 15 bits of instruction
     // if A instruction.
     Not(in=instruction[15], out=isAInstruction);
     Or(a=isAInstruction, b=instruction[5], out=loadAReg);
-    Mux16(a=aluOut, b[0..14]=instruction[0..14], b[15]=false, sel=instruction[15], out=aRegIn);
-    ARegister(in=aRegIn, load=loadAReg, out=aRegOut, out=addressM);
+    Mux16(a[0..14]=instruction[0..14], a[15]=false, b=aluOut, sel=instruction[15], out=aRegIn);
+    ARegister(in=aRegIn, load=loadAReg, out=aRegOut, out[0..14]=addressM, out[0..14]=pcIn);
 
-    PC(in=aRegOut, load=, inc=, reset=reset, out=pc);
+    // D register. Load when d2 bit is set and not A instruction.
+    And(a=instruction[15], b=instruction[4], out=loadD);
+    DRegister(in=aluOut, load=loadD, out=x);
+
+    // ALU input b. Select A reg when a in instruction is cleared, else select M location.
+    Mux16(a=aRegOut, b=inM, sel=instruction[12], out=y);
+
+    // ALU controls. They've made this very easy. c1..c6 is zx..no.
+    ALU(x=x, y=y, zx=instruction[11], nx=instruction[10], zy=instruction[9], ny=instruction[8], f=instruction[7], no=instruction[6], out=outM, out=aluOut, zr=zrOut, ng=ngOut);
+
+    // PC.
+    Or(a=zrOut, b=ngOut, out=zrOrNg);
+    Not(in=zrOrNg, out=GT);
+
+    And(a=instruction[0], b=GT, out=JGT);
+    And(a=instruction[1], b=zrOut, out=JE);
+    And(a=instruction[2], b=ngOut, out=JLT);
+
+    Or(a=JGT, b=JE, out=JGTOrJE);
+    Or(a=JGTOrJE, b=JLT, out=jumpMatches);
+    And(a=jumpMatches, b=instruction[15], out=someJump); // Can only jump on C instructions where the flags are aligned.
+
+    Not(in=someJump, out=notSomeJump);
+    PC(in[0..14]=pcIn, in=false, load=someJump, inc=notSomeJump, reset=reset, out[0..14]=pc);
+
+    // writeM output. Asserted when D3 is asserted and this is a C instruction.
+    And(a=instruction[3], b=instruction[15], out=writeM);
 }
