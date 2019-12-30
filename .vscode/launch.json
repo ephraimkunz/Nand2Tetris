@@ -10,7 +10,7 @@
             "request": "launch",
             "mainClass": "projects.Assembler.HackAssembler",
             "args": [
-                "~/Desktop/nand2tetris/projects/06/rect/RectL.asm"
+                "~/Desktop/nand2tetris/projects/06/pong/PongL.asm"
             ]
         }
     ]

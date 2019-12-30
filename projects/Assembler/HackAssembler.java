@@ -6,9 +6,13 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.regex.Pattern;
+import projects.Assembler.Parser.CommandType;
+import java.util.Map;
 
 // Initializes I/O and drives the process
 class HackAssembler {
@@ -22,6 +26,37 @@ class HackAssembler {
         final String[] parts = inFilename.split(Pattern.quote("."));
         final String outFilename = parts[0] + ".hack";
 
+        Parser parser = new Parser(inFilename);
+        final Code code = new Code();
+        final SymbolTable symbols = new SymbolTable();
+
+        // First pass - just the jump labels.
+        int currentInstruction = 0;
+        while (parser.nextToken()) {
+            if (parser.currentCommandType() == CommandType.Label) {
+                String var = parser.label();
+                symbols.insert(var, String.format("%d", currentInstruction + 1));
+            } else {
+                currentInstruction ++; // Labels will be removed from output, so don't count them.
+            }
+        }
+
+        // Second pass - just non-jump label variables.
+        int currentVarAddress = 16;
+        parser.reset();
+        while (parser.nextToken()) {
+            if (parser.currentCommandType() == CommandType.ACommand) {
+                // Map to consecutive memory locations starting at 16 from first definition position.
+                String var = parser.label();
+                if (!isInt(var) && !symbols.exists(var)) {
+                    // Can't parse as an int, so we know it's a variable.
+                    // If it was a label, it's already in the symbol table, so only add new variables.
+                    symbols.insert(var, String.format("%d", currentVarAddress ++));
+                }
+            }
+        }
+
+        // Third pass - output binary now that our symbol table is built.
         PrintWriter pw;
         try {
             pw = new PrintWriter(outFilename);
@@ -30,13 +65,15 @@ class HackAssembler {
             return;
         }
 
-        final Parser parser = new Parser(inFilename);
-        final Code code = new Code();
-
+        parser.reset();
         while (parser.nextToken()) {
             switch (parser.currentCommandType()) {
             case ACommand:
-                final String address = parser.label();
+                String address = parser.label();
+                if (!isInt(address)) {
+                    address = symbols.addressForSymbol(address);
+                }
+
                 pw.println("0" + code.address(address));
                 break;
             case CCommand:
@@ -52,6 +89,15 @@ class HackAssembler {
         }
 
         pw.close();
+    }
+
+    private static boolean isInt(String s) {
+        try {
+            Integer.parseInt(s);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 }
 
@@ -69,7 +115,16 @@ class Parser {
         List<String> lines = Collections.emptyList();
         try {
             lines = Files.readAllLines(Paths.get(fileName), StandardCharsets.UTF_8);
-            lines.forEach(a -> a.trim());
+
+            List<String> newLines = new ArrayList<String>();
+            for (String s : lines) {
+                s = s.replaceAll("//.*$", ""); // Replace comments with nothing.
+                if (s.length() > 0) {
+                    newLines.add(s.trim());
+                }
+            }
+
+            lines = newLines;
         }
 
         catch (final IOException e) {
@@ -79,19 +134,13 @@ class Parser {
         return lines;
     }
 
+    public void reset() {
+        currentIndex = -1;
+    }
+
     public Boolean nextToken() {
         currentIndex++;
-        while (currentIndex < lines.size()) {
-            final String line = lines.get(currentIndex);
-            if (line.startsWith("//") || line.length() == 0) {
-                currentIndex++;
-                continue;
-            }
-
-            return true;
-        }
-
-        return false;
+        return currentIndex < lines.size();
     }
 
     public CommandType currentCommandType() {
@@ -320,5 +369,34 @@ class Code {
 
 // Manages symbol table.
 class SymbolTable {
+    private Map<String, String> map;
 
+    public SymbolTable() {
+        map = new HashMap<>();
+
+        // Add predefined symbols.
+        insert("SP", "0");
+        insert("LCL", "1");
+        insert("ARG", "2");
+        insert("THIS", "3");
+        insert("THAT", "4");
+        insert("SCREEN", "16384");
+        insert("KBD", "24576");
+        
+        for (int i = 0; i < 16; ++i) {
+            insert("R" + i, String.format("%d", i));
+        }
+    }
+
+    public void insert(String symbol, String address) {
+        map.put(symbol, address);
+    }
+
+    public boolean exists(String symbol) {
+        return map.get(symbol) != null;
+    }
+
+    public String addressForSymbol(String symbol) {
+        return map.get(symbol);
+    }
 }
