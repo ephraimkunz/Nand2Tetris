@@ -71,7 +71,7 @@ class HackAssembler {
             case ACommand:
                 String address = parser.label();
                 if (!isInt(address)) {
-                    address = symbols.addressForSymbol(address);
+                    address = symbols.addressForSymbol(address); // Symbol table lookup.
                 }
 
                 pw.println("0" + code.address(address));
@@ -108,7 +108,7 @@ class Parser {
 
     public Parser(final String filename) {
         lines = readFileIntoList(filename);
-        currentIndex = 0;
+        currentIndex = -1;
     }
 
     private static List<String> readFileIntoList(final String fileName) {
@@ -119,8 +119,9 @@ class Parser {
             List<String> newLines = new ArrayList<String>();
             for (String s : lines) {
                 s = s.replaceAll("//.*$", ""); // Replace comments with nothing.
+                s = s.trim();
                 if (s.length() > 0) {
-                    newLines.add(s.trim());
+                    newLines.add(s);
                 }
             }
 
